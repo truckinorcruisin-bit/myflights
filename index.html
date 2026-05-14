@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Flight Path Globe</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.4.0/mapbox-gl.js" onerror="document.getElementById('load-err').style.display='flex'"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff;overflow:hidden}
+#map{position:absolute;top:0;left:0;width:100%;height:100%}
+#token-screen{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at center,#0a0a2e 0%,#000 70%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;padding:20px}
+#token-screen h1{font-size:24px;font-weight:700;background:linear-gradient(135deg,#4af,#f4a);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+#token-screen p{font-size:13px;opacity:.6;max-width:400px;text-align:center;line-height:1.6}
+#token-screen a{color:#6af}
+#tk{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);color:#fff;padding:12px 16px;border-radius:10px;font-size:14px;width:min(440px,85vw);outline:none;font-family:monospace;transition:border-color .2s}
+#tk:focus{border-color:rgba(100,180,255,.5)}
+#tk.err{border-color:#f44;animation:shake .3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+#go{background:linear-gradient(135deg,#2266cc,#4488ee);border:none;color:#fff;padding:10px 32px;border-radius:10px;font-size:14px;cursor:pointer;font-weight:600;transition:opacity .2s}
+#go:hover{opacity:.85}
+#token-err{color:#f88;font-size:12px;display:none}
+#ui{position:fixed;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:10;flex-wrap:wrap;justify-content:center;max-width:95vw}
+button.ub{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;padding:6px 14px;border-radius:20px;cursor:pointer;font-size:12px;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);transition:all .2s;white-space:nowrap}
+button.ub:hover{background:rgba(255,255,255,.2)}
+button.ub.active{background:rgba(100,180,255,.3);border-color:rgba(100,180,255,.5)}
+#info{position:fixed;top:max(12px,env(safe-area-inset-top));left:12px;z-index:10;font-size:12px;line-height:1.5;backdrop-filter:blur(10px);background:rgba(0,0,0,.6);padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.1);display:none}
+.yr{font-size:22px;font-weight:700;background:linear-gradient(135deg,#4af,#f4a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.rt{font-size:13px;font-weight:600;color:#adf;margin:2px 0}
+.st{font-size:11px;opacity:.7}
+#leg{position:fixed;top:max(12px,env(safe-area-inset-top));right:12px;z-index:10;font-size:11px;line-height:1.7;backdrop-filter:blur(10px);background:rgba(0,0,0,.6);padding:0;border-radius:10px;border:1px solid rgba(255,255,255,.1);max-height:50vh;overflow:hidden;transition:max-height .3s;display:none}
+#leg.shut{max-height:34px}
+#lh{padding:8px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;user-select:none;-webkit-user-select:none}
+#lh .a{font-size:10px;opacity:.5;transition:transform .3s}
+#leg.shut #lh .a{transform:rotate(-90deg)}
+#lb{padding:0 12px 8px;overflow-y:auto;max-height:calc(50vh - 40px);-webkit-overflow-scrolling:touch}
+.li{display:flex;align-items:center;gap:6px}
+.sw{width:12px;height:3px;border-radius:2px;flex-shrink:0}
+.ot{color:#8af;cursor:pointer;padding:2px 0;user-select:none;font-size:11px}
+#pb{position:fixed;top:0;left:0;height:2px;background:linear-gradient(90deg,#44f,#a4f,#4cc,#4c4,#fa0,#f44);z-index:20;transition:width .1s;display:none}
+.mapboxgl-ctrl-bottom-left,.mapboxgl-ctrl-bottom-right{opacity:.3}
+#load-err{display:none;position:fixed;inset:0;z-index:200;background:#000;color:#f88;font-size:14px;padding:40px;text-align:center;align-items:center;justify-content:center;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="token-screen">
+  <h1>3D Flight Path Globe</h1>
+  <p>Enter your Mapbox public access token to load the globe.<br>Get a free token at <a href="https://account.mapbox.com/access-tokens/" target="_blank">mapbox.com</a></p>
+  <input id="tk" placeholder="pk.eyJ1Ijo..." spellcheck="false" autocomplete="off">
+  <div id="token-err">Invalid token — it should start with <code>pk.</code></div>
+  <button id="go">Launch Globe</button>
+</div>
+<div id="load-err">⚠ Mapbox GL JS couldn't load. Try opening this file directly in your browser.</div>
+<div id="map"></div>
+<div id="pb" style="width:0%"></div>
+<div id="info"><div class="yr" id="yr">2004</div><div class="rt" id="rt">—</div><div class="st" id="st"></div><div class="st" id="dt"></div></div>
+<div id="leg"><div id="lh"><span style="font-size:12px;font-weight:600;opacity:.8">Airlines</span><span class="a">▼</span></div><div id="lb"></div></div>
+<div id="ui" style="display:none">
+  <button class="ub active" id="bp">▶ Play</button>
+  <button class="ub" id="bs">1×</button>
+  <button class="ub" id="ba">Show All</button>
+  <button class="ub active" id="br">Rotate</button>
+  <button class="ub" id="bx">Reset</button>
+</div>
+<script>
+(function(){
+var map,ready=false,userInteracting=false;
+
+var AC={'United Airlines':'#1a5cb5','Southwest Airlines':'#e07014','American Airlines':'#cc2222','Delta Air Lines':'#a0284a','US Airways':'#7858b0','Continental Airlines':'#4078c8','Spirit Airlines':'#eed830','Frontier Airlines':'#30b060','SkyWest':'#78a0d0','South African Airways':'#10a070','LAN Airlines':'#2050a0','Aer Lingus':'#10b868','Aerolineas Argentinas':'#78b8e8','Iberia Airlines':'#d8b830','Alaska Airlines':'#108898','Ethiopian Airlines':'#40a840','TAP Portugal':'#10c878','Vueling Airlines':'#fad800','Lufthansa':'#0068a0','Allegiant Air':'#d8a000','Air Dolomiti':'#7888c0','Cape Air':'#c0c0c0','Charter':'#a8a8a8','American Eagle Airlines':'#cc2222','Formosa Airlines':'#c8a030'};
+function aColor(n){return AC[n]||'#999'}
+
+var AP={ORD:[41.97,-87.91],MDW:[41.79,-87.75],MDT:[40.19,-76.76],SEA:[47.45,-122.31],EWR:[40.69,-74.18],BDA:[32.36,-64.68],LGA:[40.78,-73.87],STL:[38.75,-90.37],RSW:[26.54,-81.76],ATL:[33.64,-84.43],MCO:[28.43,-81.31],BNA:[36.13,-86.68],MCI:[39.30,-94.71],CLE:[41.41,-81.85],BZN:[45.78,-111.15],FRA:[50.04,8.56],FLR:[43.81,11.21],FCO:[41.80,12.24],HPN:[41.07,-73.71],DEN:[39.86,-104.67],LAS:[36.08,-115.15],PIT:[40.49,-80.23],DFW:[32.90,-97.04],MSP:[44.89,-93.22],SAN:[32.73,-117.19],MSY:[29.99,-90.26],PHL:[39.87,-75.24],LEX:[38.04,-84.61],SFO:[37.62,-122.38],OAK:[37.72,-122.22],MSN:[43.14,-89.34],YYZ:[43.68,-79.63],IAD:[38.95,-77.46],MTJ:[38.51,-107.89],PHX:[33.44,-112.01],BWI:[39.18,-76.67],BOS:[42.37,-71.01],GRU:[-23.44,-46.47],JNB:[-26.14,28.25],CPT:[-33.97,18.60],SZK:[-24.96,31.59],MQP:[-25.38,31.11],SEZ:[-4.67,55.52],ADD:[9.02,38.75],LHR:[51.47,-.45],LIS:[38.78,-9.14],SVQ:[37.42,-5.89],BIO:[43.30,-2.91],BCN:[41.30,2.08],EAS:[43.36,-1.79],EDI:[55.95,-3.36],MAD:[40.50,-3.57],SCL:[-33.39,-70.79],PUQ:[-53.00,-70.86],PMC:[-41.44,-73.09],MIA:[25.80,-80.29],SJU:[18.44,-66.00],VQS:[18.12,-65.42],NEG:[18.34,-78.33],NAS:[25.04,-77.47],SAL:[13.44,-89.06],PUJ:[18.57,-68.36],CUN:[21.04,-86.88],DUB:[53.43,-6.25],SNN:[52.70,-8.93],RNO:[39.50,-119.77],BRO:[25.91,-97.43],BDL:[41.94,-72.68],DAY:[39.90,-84.22],LAX:[33.94,-118.41],TUS:[32.12,-110.94],BMI:[40.48,-88.92],CMH:[40.00,-82.89],IGR:[-25.74,-54.47],EZE:[-34.82,-58.54],HDN:[40.48,-107.22],ALB:[42.75,-73.80],CAK:[40.92,-81.44],CLT:[35.21,-80.94],APF:[26.15,-81.78],PGD:[26.92,-81.99],DTW:[42.21,-83.35],SLC:[40.79,-111.98],IAH:[29.98,-95.34],YVR:[49.20,-123.18],RDU:[35.88,-78.79],DCA:[38.85,-77.04],MKE:[42.95,-87.90]};
+
+var R="6/20/04,CLE,PHL,US Airways|6/20/04,PHL,SNN,Aer Lingus|6/30/04,DUB,PHL,Aer Lingus|6/30/04,PHL,CLE,US Airways|3/5/05,CLE,CUN,American Airlines|3/10/05,CUN,CLE,American Airlines|12/10/05,CLE,DEN,American Airlines|12/10/05,DEN,RNO,American Airlines|12/20/05,RNO,DEN,United Airlines|12/20/05,DEN,CLE,United Airlines|3/5/06,CLE,PUJ,US Airways|3/10/06,PUJ,CLE,US Airways|7/7/06,CLE,IAH,United Airlines|7/7/06,IAH,SAL,United Airlines|7/11/06,SAL,IAH,United Airlines|7/11/06,IAH,CLE,United Airlines|12/18/06,CLE,CLT,US Airways|12/18/06,CLT,NAS,US Airways|12/23/06,NAS,CLT,US Airways|12/23/06,CLT,CLE,US Airways|3/5/09,ORD,NEG,United Airlines|3/10/09,NEG,ORD,United Airlines|6/1/09,ORD,BDL,United Airlines|6/5/09,BDL,ORD,United Airlines|6/12/09,BDL,DAY,United Airlines|7/5/09,ORD,BDL,United Airlines|7/10/09,BDL,ORD,United Airlines|7/15/09,ORD,BDL,United Airlines|7/20/09,ORD,BDL,United Airlines|7/20/09,BDL,ORD,United Airlines|7/25/09,BDL,ORD,United Airlines|8/1/09,ORD,BDL,United Airlines|8/5/09,BDL,ORD,United Airlines|3/5/10,ORD,BRO,United Airlines|3/10/10,BRO,ORD,United Airlines|6/30/10,CLE,ATL,Delta Air Lines|6/30/10,ATL,EZE,Delta Air Lines|7/2/10,EZE,IGR,Aerolineas Argentinas|7/4/10,IGR,EZE,Aerolineas Argentinas|7/4/10,EZE,SCL,LAN Airlines|7/11/10,SCL,ATL,Delta Air Lines|7/11/10,ATL,CLE,Delta Air Lines|8/1/10,ORD,DFW,American Airlines|8/1/10,DFW,PHX,American Airlines|8/6/10,PHX,ORD,American Airlines|8/8/10,ORD,ATL,Delta Air Lines|8/13/10,ATL,ORD,Delta Air Lines|11/23/10,ORD,CAK,US Airways|12/23/10,MSN,ORD,US Airways|12/23/10,ORD,CLE,Continental Airlines|1/4/11,ORD,MSN,American Airlines|3/4/11,MSN,MKE,Frontier Airlines|3/4/11,MKE,STL,Frontier Airlines|3/6/11,STL,MKE,Frontier Airlines|3/6/11,MKE,MSN,Frontier Airlines|3/23/11,MSN,ORD,American Airlines|3/23/11,ORD,HDN,American Airlines|3/27/11,HDN,DEN,Frontier Airlines|3/27/11,DEN,MSN,Frontier Airlines|4/22/11,MSN,CLE,Continental Airlines|4/25/11,CLE,MSN,Continental Airlines|6/24/11,MSN,CLE,Continental Airlines|6/26/11,CLE,MSN,Continental Airlines|7/29/11,MSN,CLE,Continental Airlines|7/29/11,CLE,ALB,Continental Airlines|7/31/11,ALB,EWR,Continental Airlines|7/31/11,EWR,MSN,Continental Airlines|8/10/11,MSN,MSP,American Airlines|8/14/11,LAX,DFW,Delta Air Lines|8/14/11,DFW,MSN,Delta Air Lines|8/17/11,MSP,LAX,American Airlines|11/11/11,MSN,DCA,Delta Air Lines|11/13/11,DCA,MSN,Delta Air Lines|11/18/11,MSN,ORD,American Airlines|11/28/11,ORD,MSN,American Airlines|12/22/11,MSN,ORD,Continental Airlines|12/22/11,ORD,CLE,Continental Airlines|1/2/12,ORD,MSN,Continental Airlines|1/16/12,ORD,MIA,American Airlines|1/16/12,MIA,SCL,American Airlines|1/19/12,SCL,PUQ,LAN Airlines|1/23/12,PUQ,PMC,LAN Airlines|1/23/12,PMC,SCL,LAN Airlines|1/24/12,SCL,MIA,American Airlines|1/25/12,MIA,ORD,American Airlines|1/30/12,ORD,MSN,American Airlines|2/20/12,ORD,DFW,United Airlines|2/22/12,DFW,PHX,US Airways|2/22/12,PHX,SLC,US Airways|2/26/12,SLC,DFW,Delta Air Lines|2/27/12,DFW,MSP,Delta Air Lines|2/27/12,MSP,MSN,Delta Air Lines|6/8/12,MDW,EWR,Southwest Airlines|6/10/12,EWR,MDW,Southwest Airlines|6/16/12,MDW,MCI,Southwest Airlines|6/18/12,MCI,MDW,Southwest Airlines|8/22/12,MDW,LAX,Southwest Airlines|8/26/12,LAX,MDW,Southwest Airlines|11/16/12,MDW,PHL,Southwest Airlines|11/18/12,PHL,MDW,Southwest Airlines|1/5/13,ORD,CLT,American Airlines|1/5/13,CLT,MIA,American Airlines|1/8/13,MIA,CLT,US Airways|1/8/13,CLT,ORD,US Airways|1/14/13,ORD,MDT,American Airlines|1/17/13,MDT,ORD,American Airlines|1/22/13,ORD,MDT,American Airlines|1/24/13,MDT,ORD,American Airlines|2/4/13,ORD,MDT,United Airlines|2/7/13,MDT,IAD,United Airlines|2/7/13,IAD,ORD,United Airlines|2/11/13,ORD,MDT,United Airlines|2/15/13,MDT,ORD,United Airlines|2/20/13,MDW,DEN,Southwest Airlines|2/25/13,DEN,MDW,Southwest Airlines|2/25/13,ORD,MDT,American Airlines|2/28/13,MDT,ORD,United Airlines|3/6/13,ORD,MDT,United Airlines|3/8/13,MDT,ORD,United Airlines|3/11/13,ORD,MDT,United Airlines|3/14/13,ORD,MDT,United Airlines|3/14/13,MDT,ORD,United Airlines|3/28/13,MDT,CLE,United Airlines|4/1/13,CLE,MDT,United Airlines|4/5/13,MDT,ORD,United Airlines|4/8/13,ORD,MDT,United Airlines|4/12/13,MDT,ORD,United Airlines|4/15/13,ORD,MDT,United Airlines|4/18/13,MDT,ORD,American Airlines|4/22/13,ORD,MDT,United Airlines|4/24/13,MDT,ORD,United Airlines|4/25/13,ORD,MAD,Iberia Airlines|5/1/13,SVQ,BCN,Formosa Airlines|5/5/13,MAD,ORD,Iberia Airlines|5/6/13,ORD,MDT,United Airlines|5/10/13,MDT,ORD,United Airlines|5/13/13,ORD,MDT,United Airlines|5/17/13,MDT,ORD,United Airlines|5/20/13,ORD,MDT,United Airlines|5/23/13,MDT,ORD,United Airlines|5/28/13,ORD,MDT,United Airlines|6/6/13,MDT,ORD,United Airlines|6/11/13,ORD,MDT,United Airlines|6/13/13,MDT,ATL,Delta Air Lines|6/13/13,ATL,BNA,Delta Air Lines|6/16/13,BNA,ATL,Delta Air Lines|6/16/13,ATL,MDT,Delta Air Lines|6/21/13,MDT,ORD,United Airlines|6/24/13,ORD,MDT,United Airlines|6/27/13,MDT,ORD,United Airlines|7/1/13,ORD,MDT,United Airlines|7/3/13,MDT,ORD,United Airlines|7/8/13,ORD,MDT,United Airlines|7/11/13,MDT,CLE,United Airlines|7/16/13,ORD,MDT,United Airlines|7/19/13,MDT,ORD,United Airlines|7/29/13,ORD,MDT,United Airlines|8/2/13,MDT,ORD,United Airlines|8/5/13,ORD,MDT,United Airlines|8/9/13,MDT,ORD,United Airlines|8/11/13,CLE,ORD,United Airlines|8/14/13,MDW,LAS,Southwest Airlines|8/18/13,LAX,MDW,Southwest Airlines|8/19/13,ORD,MDT,United Airlines|8/23/13,MDT,ORD,United Airlines|8/26/13,ORD,MDT,United Airlines|8/30/13,MDT,IAD,United Airlines|8/30/13,IAD,CMH,United Airlines|9/9/13,ORD,MDT,United Airlines|9/12/13,IAD,ORD,United Airlines|9/17/13,MDT,ORD,United Airlines|9/17/13,ORD,MDT,United Airlines|9/20/13,MDT,ORD,United Airlines|9/23/13,ORD,MDT,American Eagle Airlines|10/4/13,MDT,ORD,United Airlines|10/7/13,ORD,MDT,United Airlines|10/11/13,MDT,ORD,United Airlines|10/14/13,ORD,MDT,United Airlines|10/17/13,MDT,ORD,United Airlines|10/21/13,ORD,MDT,United Airlines|10/25/13,MDT,ORD,United Airlines|10/28/13,ORD,MDT,United Airlines|11/1/13,MDT,ORD,United Airlines|11/4/13,ORD,MDT,United Airlines|11/7/13,MDT,ORD,United Airlines|11/12/13,ORD,MDT,United Airlines|11/15/13,MDT,ORD,United Airlines|11/18/13,ORD,MDT,United Airlines|11/22/13,MDT,ORD,United Airlines|11/25/13,ORD,MDT,United Airlines|11/25/13,MDT,CLE,United Airlines|12/1/13,CLE,MDT,United Airlines|12/5/13,MDT,ORD,United Airlines|12/9/13,ORD,MDT,United Airlines|12/20/13,MDT,ORD,United Airlines|2/7/14,MDW,LGA,Southwest Airlines|2/9/14,LGA,MDW,Southwest Airlines|2/14/14,ORD,PHL,United Airlines|2/16/14,PHL,ORD,United Airlines|2/19/14,ORD,SLC,United Airlines|2/24/14,SLC,DEN,United Airlines|3/3/14,DEN,ORD,United Airlines|3/3/14,ORD,MDT,United Airlines|3/7/14,MDT,ORD,United Airlines|3/10/14,ORD,MDT,United Airlines|3/14/14,MDT,ORD,United Airlines|3/17/14,ORD,MDT,United Airlines|3/20/14,MDT,ORD,United Airlines|4/7/14,ORD,MDT,United Airlines|4/10/14,MDT,ORD,United Airlines|5/8/14,MDW,RDU,Southwest Airlines|5/11/14,RDU,MDW,Southwest Airlines|7/18/14,ORD,IAD,United Airlines|7/20/14,IAD,ORD,United Airlines|8/19/14,MDW,LAX,Southwest Airlines|8/24/14,LAX,MDW,Southwest Airlines|10/3/14,ORD,DEN,United Airlines|10/6/14,DEN,MDW,Southwest Airlines|10/13/14,ORD,MDT,United Airlines|10/16/14,MDT,ORD,United Airlines|10/20/14,ORD,MDT,United Airlines|10/23/14,MDT,ORD,United Airlines|10/27/14,ORD,MDT,United Airlines|10/30/14,MDT,ORD,United Airlines|11/6/14,MDW,TUS,Southwest Airlines|11/10/14,TUS,DEN,United Airlines|11/10/14,DEN,MDT,Frontier Airlines|12/1/14,ORD,MDT,United Airlines|12/4/14,MDT,ORD,United Airlines|12/8/14,ORD,MDT,United Airlines|12/11/14,MDT,ORD,United Airlines|12/15/14,ORD,MDT,United Airlines|12/18/14,MDT,ORD,United Airlines|1/19/15,ORD,DFW,United Airlines|1/23/15,DFW,ORD,Spirit Airlines|1/30/15,RSW,MDW,Southwest Airlines|1/30/15,MDW,RSW,Southwest Airlines|2/16/15,ORD,MDT,United Airlines|2/22/15,CLE,ORD,American Airlines|3/2/15,DEN,SEA,United Airlines|3/2/15,SEA,ORD,United Airlines|3/16/15,ORD,MDT,United Airlines|3/19/15,MDT,ORD,United Airlines|3/23/15,ORD,MDT,United Airlines|3/26/15,MDT,ORD,United Airlines|4/7/15,MDT,ORD,United Airlines|4/13/15,ORD,BOS,United Airlines|4/14/15,BOS,MDT,United Airlines|4/16/15,MDT,ORD,United Airlines|4/21/15,ORD,MDT,United Airlines|4/29/15,MDT,ORD,United Airlines|5/4/15,ORD,MDT,United Airlines|5/7/15,MDT,ORD,United Airlines|5/8/15,ORD,MSY,United Airlines|5/10/15,MSY,ORD,United Airlines|5/11/15,ORD,MDT,United Airlines|5/14/15,MDT,ORD,United Airlines|5/19/15,ORD,MDT,United Airlines|5/21/15,MDT,ORD,United Airlines|5/31/15,ORD,MDT,United Airlines|6/3/15,MDT,ORD,United Airlines|6/8/15,ORD,MDT,United Airlines|6/10/15,MDT,ORD,United Airlines|7/13/15,ORD,DEN,United Airlines|7/16/15,DEN,ORD,United Airlines|7/20/15,ORD,MDT,United Airlines|7/22/15,MDT,ORD,United Airlines|8/2/15,ORD,MDT,United Airlines|8/5/15,MDT,ORD,United Airlines|8/12/15,ORD,DFW,United Airlines|8/14/15,DFW,ORD,United Airlines|8/17/15,ORD,MDT,United Airlines|8/20/15,MDT,ORD,United Airlines|8/24/15,ORD,MDT,United Airlines|8/26/15,MDT,ORD,United Airlines|8/27/15,MDW,DEN,Southwest Airlines|8/30/15,DEN,ORD,United Airlines|8/30/15,ORD,MDT,United Airlines|9/3/15,MDT,ORD,United Airlines|9/15/15,ORD,MDT,United Airlines|9/18/15,MDT,ORD,United Airlines|9/21/15,ORD,MDT,United Airlines|9/24/15,MDT,ORD,United Airlines|9/28/15,ORD,MDT,United Airlines|10/1/15,MDT,ORD,United Airlines|10/2/15,ORD,EDI,United Airlines|10/11/15,LHR,ORD,United Airlines|10/13/15,ORD,MDT,United Airlines|10/16/15,MDT,ORD,United Airlines|11/3/15,ORD,MDT,United Airlines|11/5/15,MDT,ORD,United Airlines|11/9/15,ORD,MDT,United Airlines|11/12/15,MDT,ORD,United Airlines|11/16/15,ORD,MDT,United Airlines|11/19/15,MDT,IAD,United Airlines|11/19/15,IAD,BOS,United Airlines|11/22/15,BOS,IAD,United Airlines|11/22/15,IAD,MDT,United Airlines|11/24/15,ORD,DCA,United Airlines|11/24/15,MDT,ORD,United Airlines|12/7/15,IAD,MDT,United Airlines|12/7/15,MDT,ORD,United Airlines|12/20/15,MDW,CLE,Southwest Airlines|12/23/15,CLE,MDW,Southwest Airlines|1/4/16,ORD,MDT,United Airlines|1/7/16,MDT,ORD,United Airlines|1/18/16,ORD,MDT,United Airlines|1/21/16,MDT,ORD,United Airlines|2/22/16,ORD,CLE,United Airlines|2/23/16,CLE,IAD,United Airlines|2/23/16,IAD,MDT,United Airlines|2/25/16,MDT,ORD,United Airlines|2/29/16,ORD,MCO,United Airlines|2/29/16,ORD,MDT,United Airlines|2/29/16,MDT,ORD,United Airlines|3/10/16,MCO,ORD,United Airlines|3/17/16,ORD,LAS,Frontier Airlines|3/20/16,LAS,ORD,Spirit Airlines|3/25/16,MDW,CLE,Southwest Airlines|3/25/16,CLE,MDW,Southwest Airlines|3/28/16,ORD,MDT,United Airlines|3/31/16,MDT,ORD,United Airlines|3/31/16,ORD,MCO,United Airlines|4/7/16,MCO,ORD,United Airlines|4/11/16,ORD,MDT,United Airlines|4/14/16,MDT,ORD,United Airlines|4/18/16,ORD,MDT,United Airlines|4/26/16,MDT,ORD,United Airlines|5/2/16,MDW,MCO,Southwest Airlines|5/5/16,MCO,MDW,Southwest Airlines|5/12/16,ORD,SJU,United Airlines|5/13/16,SJU,VQS,Cape Air|5/16/16,VQS,SJU,Cape Air|5/16/16,SJU,BWI,Southwest Airlines|5/20/16,ORD,CLE,United Airlines|5/20/16,MDT,ORD,United Airlines|5/30/16,CLE,ORD,United Airlines|5/31/16,ORD,MCO,United Airlines|6/2/16,MCO,MDW,Southwest Airlines|6/7/16,ORD,MDT,United Airlines|6/11/16,MDT,IAD,United Airlines|6/11/16,IAD,STL,United Airlines|6/12/16,STL,ORD,United Airlines|6/12/16,ORD,MDT,United Airlines|6/17/16,MDT,ORD,United Airlines|6/20/16,ORD,MDT,United Airlines|6/23/16,MDT,ORD,United Airlines|6/27/16,ORD,MCO,United Airlines|6/30/16,MCO,ORD,United Airlines|7/5/16,ORD,MDT,United Airlines|7/7/16,MDT,ORD,United Airlines|7/11/16,ORD,MDT,United Airlines|7/14/16,MDT,ORD,United Airlines|7/18/16,ORD,MCO,United Airlines|7/26/16,ORD,MDT,United Airlines|8/4/16,MDT,ORD,United Airlines|8/8/16,ORD,MDT,United Airlines|8/11/16,MDT,ORD,United Airlines|8/15/16,ORD,MDT,United Airlines|8/18/16,MDT,ORD,United Airlines|8/29/16,ORD,MDT,United Airlines|9/1/16,MDT,ORD,United Airlines|9/13/16,ORD,MDT,United Airlines|9/16/16,MDT,ORD,United Airlines|9/19/16,ORD,MDT,United Airlines|9/23/16,MDT,ORD,United Airlines|9/26/16,ORD,MDT,United Airlines|9/30/16,MDT,ORD,United Airlines|10/3/16,ORD,MDT,United Airlines|10/6/16,MDT,ORD,United Airlines|10/12/16,ORD,MDT,United Airlines|10/14/16,MDT,ORD,United Airlines|10/18/16,MDT,ORD,United Airlines|10/18/16,ORD,MDT,United Airlines|11/2/16,ORD,MDT,United Airlines|11/4/16,MDT,ORD,United Airlines|11/7/16,ORD,MDT,United Airlines|11/10/16,BWI,RSW,Southwest Airlines|11/14/16,RSW,MDW,Southwest Airlines|11/14/16,ORD,DFW,United Airlines|11/18/16,DFW,ORD,United Airlines|11/21/16,ORD,MDT,United Airlines|11/23/16,MDT,ORD,United Airlines|11/28/16,ORD,MDT,United Airlines|11/28/16,MDT,ORD,United Airlines|12/5/16,ORD,MDT,United Airlines|12/8/16,MDT,ORD,United Airlines|12/12/16,ORD,IAD,United Airlines|12/12/16,IAD,MDT,United Airlines|12/15/16,MDT,ORD,United Airlines|12/19/16,ORD,MDT,United Airlines|12/22/16,MDT,ORD,American Airlines|1/9/17,ORD,MDT,United Airlines|1/12/17,MDT,ORD,United Airlines|1/17/17,ORD,MDT,United Airlines|1/20/17,MDT,ORD,United Airlines|1/23/17,ORD,MDT,United Airlines|1/26/17,MDT,ORD,United Airlines|1/26/17,ORD,DEN,United Airlines|1/29/17,DEN,IAD,United Airlines|2/8/17,ORD,YVR,United Airlines|2/12/17,YVR,DEN,United Airlines|2/12/17,DEN,ORD,United Airlines|2/13/17,ORD,MDT,United Airlines|2/17/17,MDT,ORD,United Airlines|2/20/17,ORD,MDT,United Airlines|2/23/17,MDT,ORD,United Airlines|2/27/17,ORD,MDT,United Airlines|3/1/17,MDT,ORD,United Airlines|3/1/17,ORD,BMI,American Airlines|3/13/17,ORD,MDT,United Airlines|3/16/17,MDT,ORD,United Airlines|3/20/17,ORD,MDT,United Airlines|3/23/17,MDT,ORD,United Airlines|3/27/17,ORD,MDT,United Airlines|3/29/17,MDT,ATL,Delta Air Lines|3/30/17,ATL,DTW,Delta Air Lines|4/3/17,ORD,MDT,United Airlines|4/5/17,MDT,ATL,Delta Air Lines|4/6/17,ATL,ORD,American Airlines|4/10/17,ORD,MDT,United Airlines|4/13/17,MDT,PGD,Allegiant Air|4/17/17,RSW,BWI,Southwest Airlines|4/20/17,MDT,ORD,United Airlines|4/24/17,ORD,MDT,United Airlines|4/27/17,MDT,ORD,United Airlines|5/1/17,ORD,MDT,United Airlines|5/4/17,MDT,ORD,United Airlines|5/8/17,ORD,MDT,United Airlines|5/11/17,MDT,ORD,United Airlines|5/17/17,ORD,FRA,United Airlines|5/18/17,FRA,BCN,Lufthansa|5/20/17,BCN,EAS,Vueling Airlines|5/23/17,BIO,SVQ,Vueling Airlines|5/25/17,SVQ,LIS,TAP Portugal|5/28/17,LIS,LHR,TAP Portugal|5/28/17,LHR,ORD,United Airlines|5/30/17,ORD,MDT,United Airlines|6/1/17,MDT,ORD,United Airlines|6/5/17,ORD,MDT,United Airlines|6/8/17,MDT,ORD,United Airlines|6/12/17,ORD,MDT,United Airlines|6/15/17,MDT,ORD,United Airlines|6/19/17,ORD,MDT,United Airlines|6/22/17,MDT,ORD,United Airlines|6/26/17,ORD,MDT,United Airlines|6/29/17,MDT,ORD,United Airlines|7/5/17,ORD,MDT,United Airlines|7/7/17,MDT,ORD,United Airlines|7/10/17,ORD,MDT,United Airlines|7/13/17,MDT,ORD,United Airlines|7/17/17,ORD,MDT,United Airlines|7/27/17,MDT,ORD,United Airlines|7/31/17,ORD,MDT,United Airlines|8/3/17,BWI,STL,Southwest Airlines|8/6/17,MCI,BWI,Southwest Airlines|8/10/17,MDT,ORD,United Airlines|8/14/17,ORD,MDT,United Airlines|8/17/17,MDT,ORD,United Airlines|8/28/17,ORD,MDT,United Airlines|8/31/17,MDT,ORD,United Airlines|9/7/17,MDT,ORD,United Airlines|9/11/17,ORD,MDT,United Airlines|9/14/17,MDT,ORD,United Airlines|10/2/17,ORD,MDT,United Airlines|10/5/17,MDT,ORD,United Airlines|10/9/17,ORD,MDT,United Airlines|11/4/17,MDT,ORD,United Airlines|11/6/17,ORD,MDT,United Airlines|11/10/17,MDT,ORD,United Airlines|11/13/17,ORD,MDT,United Airlines|11/17/17,MDT,ORD,United Airlines|11/20/17,ORD,MDT,United Airlines|11/22/17,BWI,RSW,Southwest Airlines|11/24/17,RSW,ORD,Spirit Airlines|11/27/17,ORD,MDT,United Airlines|12/1/17,MDT,ORD,United Airlines|12/4/17,ORD,MDT,United Airlines|12/7/17,MDT,ORD,United Airlines|12/10/17,ORD,MDT,United Airlines|12/21/17,MDT,ORD,United Airlines|12/29/17,MDT,ORD,United Airlines|1/8/18,ORD,MDT,United Airlines|1/11/18,MDT,ORD,United Airlines|1/12/18,MDW,PHX,Southwest Airlines|1/15/18,PHX,MDW,Southwest Airlines|1/16/18,ORD,MDT,United Airlines|1/19/18,MDT,ORD,United Airlines|1/22/18,ORD,MDT,United Airlines|1/25/18,MDT,ORD,United Airlines|2/11/18,MSN,ORD,United Airlines|2/11/18,ORD,DFW,United Airlines|2/14/18,DFW,ORD,United Airlines|2/19/18,ORD,MDT,United Airlines|2/24/18,PHL,ORD,United Airlines|2/26/18,ORD,MDT,United Airlines|2/28/18,MDT,ORD,United Airlines|3/1/18,MDW,DEN,Southwest Airlines|3/6/18,DEN,ORD,Southwest Airlines|3/12/18,ORD,MDT,United Airlines|3/16/18,PHL,RSW,American Airlines|3/18/18,RSW,PHL,American Airlines|3/22/18,MDT,ORD,United Airlines|3/26/18,ORD,MDT,United Airlines|5/2/18,ORD,GRU,United Airlines|5/3/18,GRU,JNB,South African Airways|5/4/18,JNB,CPT,South African Airways|5/9/18,CPT,SZK,South African Airways|5/13/18,MQP,JNB,South African Airways|5/13/18,JNB,SEZ,South African Airways|5/17/18,SEZ,ADD,Ethiopian Airlines|5/17/18,ADD,FRA,Ethiopian Airlines|5/18/18,FRA,ORD,United Airlines|5/21/18,ORD,DCA,United Airlines|5/24/18,DCA,ORD,United Airlines|6/4/18,ORD,MDT,United Airlines|6/5/18,MDT,ORD,United Airlines|6/5/18,ORD,MSN,United Airlines|6/8/18,MSN,ORD,United Airlines|6/18/18,ORD,MSN,United Airlines|6/20/18,MSN,DFW,American Airlines|6/22/18,DFW,ORD,American Airlines|7/9/18,ORD,MSN,United Airlines|7/12/18,MSN,ORD,United Airlines|7/16/18,ORD,MSN,United Airlines|7/18/18,MSN,ORD,United Airlines|7/19/18,DFW,ORD,United Airlines|7/30/18,ORD,MDT,United Airlines|8/2/18,MDT,ORD,United Airlines|8/24/18,ORD,BNA,Southwest Airlines|8/26/18,BNA,MDW,Southwest Airlines|8/27/18,MDW,MDT,United Airlines|8/30/18,MDT,ORD,United Airlines|9/11/18,CLE,ORD,United Airlines|9/11/18,ORD,MSN,United Airlines|9/13/18,MSN,ORD,United Airlines|9/16/18,ORD,SEA,United Airlines|9/19/18,SEA,OAK,Alaska Airlines|9/24/18,SFO,ORD,United Airlines|10/8/18,ORD,MSN,United Airlines|10/11/18,MSN,ORD,American Airlines|10/11/18,ORD,CLE,American Airlines|10/23/18,CLE,MDW,Southwest Airlines|11/12/18,ORD,MSN,United Airlines|11/15/18,MSN,ORD,United Airlines|11/15/18,ORD,RSW,United Airlines|11/18/18,RSW,ORD,United Airlines|11/18/18,ORD,MSN,United Airlines|12/8/18,ORD,LGA,United Airlines|12/10/18,EWR,ORD,United Airlines|12/10/18,ORD,MSN,United Airlines|12/13/18,MSN,ORD,United Airlines|12/17/18,ORD,BNA,United Airlines|12/18/18,BNA,IAD,United Airlines|12/18/18,IAD,MDT,United Airlines|12/20/18,MDT,ORD,United Airlines|12/23/18,CLE,STL,Southwest Airlines|12/24/18,STL,CLE,Southwest Airlines|1/10/19,LGA,ORD,United Airlines|1/13/19,DTW,MSN,Delta Air Lines|1/17/19,MSN,ORD,United Airlines|2/4/19,ORD,MSN,United Airlines|2/6/19,MSN,DTW,Delta Air Lines|2/6/19,DTW,SLC,Delta Air Lines|2/6/19,SLC,MDW,Southwest Airlines|2/18/19,ORD,MDT,Southwest Airlines|2/18/19,MDT,ORD,American Airlines|2/22/19,ORD,MTJ,United Airlines|2/27/19,MTJ,ORD,United Airlines|3/18/19,ORD,MSN,United Airlines|3/20/19,MSN,ORD,United Airlines|3/20/19,ORD,MDT,United Airlines|3/21/19,MDT,ORD,United Airlines|3/21/19,ORD,RSW,United Airlines|4/6/19,RSW,ORD,United Airlines|4/11/19,ORD,PHX,American Airlines|4/14/19,PHX,ORD,American Airlines|4/25/19,ORD,SAN,United Airlines|4/28/19,SAN,ORD,United Airlines|5/2/19,ORD,MDT,United Airlines|5/2/19,MDT,ORD,United Airlines|5/28/19,ORD,MDT,United Airlines|5/30/19,MDT,ORD,United Airlines|6/10/19,ORD,MSN,United Airlines|6/13/19,DEN,MDW,Southwest Airlines|6/13/19,MSN,DEN,United Airlines|6/24/19,ORD,MSN,United Airlines|6/27/19,MSN,ORD,United Airlines|6/27/19,ORD,PIT,United Airlines|7/3/19,MDT,ORD,United Airlines|7/29/19,ORD,MSN,United Airlines|8/1/19,MSN,ORD,United Airlines|8/5/19,ORD,MDT,United Airlines|8/9/19,MDT,IAD,United Airlines|8/9/19,IAD,YYZ,United Airlines|8/11/19,YYZ,ORD,United Airlines|8/11/19,ORD,MSN,United Airlines|11/5/19,ORD,MSN,United Airlines|11/6/19,MSN,ORD,United Airlines|11/12/19,ORD,MSN,United Airlines|11/14/19,MSN,ORD,United Airlines|11/19/19,ORD,MSN,United Airlines|11/21/19,MSN,ORD,United Airlines|12/3/19,ORD,MSN,United Airlines|12/5/19,MSN,ORD,United Airlines|12/9/19,ORD,MSN,United Airlines|12/13/19,MSN,ORD,United Airlines|12/13/19,ORD,STL,United Airlines|12/16/19,ORD,MSN,United Airlines|12/19/19,MSN,ORD,United Airlines|1/4/20,ORD,RSW,United Airlines|1/10/20,RSW,ORD,United Airlines|2/14/20,ORD,DEN,United Airlines|2/17/20,DEN,ORD,United Airlines|4/14/20,MDW,APF,Charter|12/21/20,ORD,RSW,United Airlines|12/30/20,RSW,ORD,United Airlines|7/16/21,ORD,PHL,United Airlines|7/17/21,PHL,ORD,United Airlines|10/19/21,ORD,EWR,United Airlines|10/20/21,EWR,ORD,United Airlines|12/5/21,ORD,RSW,United Airlines|12/16/21,RSW,ORD,United Airlines|2/10/22,ORD,MSY,United Airlines|2/13/22,MSY,ORD,United Airlines|2/17/22,ORD,SAN,United Airlines|2/19/22,SAN,ORD,United Airlines|3/14/22,ORD,DFW,United Airlines|3/16/22,DFW,ORD,United Airlines|3/19/22,ORD,MSP,United Airlines|3/20/22,MSP,ORD,United Airlines|4/1/22,ORD,PIT,United Airlines|4/3/22,PIT,ORD,United Airlines|6/14/22,ORD,HPN,SkyWest|6/15/22,HPN,ORD,SkyWest|6/28/22,ORD,DFW,United Airlines|6/30/22,DFW,ORD,United Airlines|7/21/22,ORD,PIT,United Airlines|7/21/22,ORD,PIT,United Airlines|9/21/22,ORD,PIT,United Airlines|9/21/22,PIT,ORD,United Airlines|9/30/22,ORD,DEN,United Airlines|10/2/22,DEN,ORD,United Airlines|10/6/22,ORD,DEN,Southwest Airlines|10/6/22,DEN,LAS,Southwest Airlines|11/5/22,ORD,RSW,United Airlines|11/14/22,RSW,ORD,United Airlines|3/13/23,ORD,HPN,SkyWest|3/13/23,HPN,ORD,SkyWest|4/22/23,ORD,FCO,United Airlines|5/2/23,FLR,FRA,Air Dolomiti|5/2/23,FRA,ORD,United Airlines|5/22/23,ORD,LEX,SkyWest|5/24/23,LEX,ORD,SkyWest|12/9/23,ORD,RSW,United Airlines|12/16/23,RSW,ORD,United Airlines|1/31/24,ORD,BZN,American Airlines|2/4/24,BZN,ORD,United Airlines|3/2/24,ORD,RSW,United Airlines|3/9/24,RSW,ORD,United Airlines|4/23/24,ORD,CLE,American Airlines|4/24/24,CLE,ORD,American Airlines|10/31/24,ORD,BNA,Southwest Airlines|10/31/24,BNA,ORD,Southwest Airlines|11/19/24,ORD,MCI,United Airlines|11/21/24,MCI,ORD,United Airlines|12/2/24,ORD,BNA,United Airlines|12/3/24,BNA,ORD,United Airlines|1/25/25,ORD,MCO,United Airlines|1/25/25,MCO,ORD,United Airlines|3/5/25,ORD,ATL,United Airlines|3/5/25,ATL,ORD,United Airlines|4/8/25,ORD,ATL,United Airlines|4/9/25,ATL,ORD,United Airlines|4/23/25,ORD,RSW,United Airlines|4/30/25,RSW,ORD,United Airlines|5/7/25,STL,ORD,United Airlines|6/27/25,ORD,LGA,United Airlines|6/29/25,LGA,ORD,United Airlines|7/10/25,ORD,EWR,United Airlines|7/10/25,EWR,BDA,United Airlines|7/14/25,BDA,EWR,United Airlines|7/14/25,EWR,ORD,United Airlines|8/9/25,ORD,SEA,United Airlines|8/17/25,SEA,ORD,United Airlines";
+
+function pD(s){var p=s.split('/');var y=+p[2];if(y<100)y+=2000;return new Date(y,+p[0]-1,+p[1])}
+var FL=R.split('|').map(function(l){var p=l.split(',');var d=pD(p[0]);return{d:d,f:p[1],t:p[2],al:p[3],yr:d.getFullYear()}}).filter(function(f){return AP[f.f]&&AP[f.t]}).sort(function(a,b){return a.d-b.d});
+
+var D2R=Math.PI/180;
+function hav(a,b){var dLa=(b[0]-a[0])*D2R,dLo=(b[1]-a[1])*D2R;var x=Math.sin(dLa/2);x*=x;x+=Math.cos(a[0]*D2R)*Math.cos(b[0]*D2R)*Math.sin(dLo/2)*Math.sin(dLo/2);return 3959*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}
+FL.forEach(function(f){f.di=hav(AP[f.f],AP[f.t])});
+
+function gcArc(a,b,n){
+  var la1=a[0]*D2R,lo1=a[1]*D2R,la2=b[0]*D2R,lo2=b[1]*D2R;
+  var p1=[Math.cos(la1)*Math.cos(lo1),Math.cos(la1)*Math.sin(lo1),Math.sin(la1)];
+  var p2=[Math.cos(la2)*Math.cos(lo2),Math.cos(la2)*Math.sin(lo2),Math.sin(la2)];
+  var dt=p1[0]*p2[0]+p1[1]*p2[1]+p1[2]*p2[2];
+  var ag=Math.acos(Math.max(-1,Math.min(1,dt)));
+  var sA=Math.sin(ag);var pts=[];
+  for(var i=0;i<=n;i++){var t=i/n;var x,y,z;
+    if(sA<.001){x=p1[0]+(p2[0]-p1[0])*t;y=p1[1]+(p2[1]-p1[1])*t;z=p1[2]+(p2[2]-p1[2])*t}
+    else{var ca=Math.sin((1-t)*ag)/sA,cb=Math.sin(t*ag)/sA;x=ca*p1[0]+cb*p2[0];y=ca*p1[1]+cb*p2[1];z=ca*p1[2]+cb*p2[2]}
+    var ln=Math.sqrt(x*x+y*y+z*z);x/=ln;y/=ln;z/=ln;
+    pts.push([Math.atan2(y,x)/D2R,Math.asin(z)/D2R])}
+  return pts;
+}
+var arcs=FL.map(function(f){return gcArc(AP[f.f],AP[f.t],40)});
+
+var alC={};FL.forEach(function(f){alC[f.al]=(alC[f.al]||0)+1});
+var srt=Object.keys(alC).map(function(k){return[k,alC[k]]}).sort(function(a,b){return b[1]-a[1]});
+var mA=srt.filter(function(e){return e[1]>=5}),oA=srt.filter(function(e){return e[1]<5});
+var oT=oA.reduce(function(s,e){return s+e[1]},0),oE=false;
+function bL(){var h='';mA.forEach(function(e){h+='<div class="li"><div class="sw" style="background:'+aColor(e[0])+'"></div>'+e[0]+' ('+e[1]+')</div>'});
+if(oA.length){h+='<div class="ot" id="ot">'+(oE?'▾':'▸')+' Other ('+oT+' flights, '+oA.length+' carriers)</div>';if(oE)oA.forEach(function(e){h+='<div class="li" style="padding-left:6px;opacity:.8"><div class="sw" style="background:'+aColor(e[0])+'"></div>'+e[0]+' ('+e[1]+')</div>'})}
+document.getElementById('lb').innerHTML=h;var t=document.getElementById('ot');if(t)t.onclick=function(e){e.stopPropagation();oE=!oE;bL()}}
+bL();
+document.getElementById('lh').onclick=function(){document.getElementById('leg').classList.toggle('shut')};
+
+var cF=0,aP=0,pl=true,sp=1,sA=false,autoRot=true,tD=0;
+var spds=[1,2,5,10,25],sI=0;
+var vA={},completedFeats=[],airportFeats={};
+
+function mkFeat(idx){
+  return{type:'Feature',properties:{color:aColor(FL[idx].al)},geometry:{type:'LineString',coordinates:arcs[idx]}}
+}
+
+function updateSources(){
+  if(!ready)return;
+  map.getSource('completed').setData({type:'FeatureCollection',features:completedFeats});
+  var af=[];
+  if(!sA&&cF<FL.length){
+    var n=Math.floor(aP*(arcs[cF].length-1))+1;
+    af=[{type:'Feature',properties:{color:aColor(FL[cF].al)},geometry:{type:'LineString',coordinates:arcs[cF].slice(0,n)}}];
+  }
+  map.getSource('active').setData({type:'FeatureCollection',features:af});
+  var apFeats=Object.keys(airportFeats).map(function(c){
+    var a=AP[c];return{type:'Feature',properties:{size:Math.min(2+airportFeats[c]*.15,6)},geometry:{type:'Point',coordinates:[a[1],a[0]]}}
+  });
+  map.getSource('airports').setData({type:'FeatureCollection',features:apFeats});
+}
+
+function uI(){
+  var yr=document.getElementById('yr'),rt=document.getElementById('rt'),st=document.getElementById('st'),dt=document.getElementById('dt'),pb=document.getElementById('pb');
+  if(sA){yr.textContent='All Flights';rt.textContent=FL.length+' flights';dt.textContent=Math.round(FL.reduce(function(s,f){return s+f.di},0)).toLocaleString()+' mi total';st.textContent='2004 – 2025';pb.style.width='100%'}
+  else if(cF<FL.length){var f=FL[cF];yr.textContent=f.yr;rt.textContent=f.f+' → '+f.t;st.textContent=f.al;dt.textContent='Flight '+(cF+1)+'/'+FL.length+' · '+Math.round(tD).toLocaleString()+' mi';pb.style.width=(cF/FL.length*100)+'%'}
+  else{yr.textContent='Complete';rt.textContent='—';pb.style.width='100%'}
+}
+
+var lastT=0;
+function animate(ts){
+  requestAnimationFrame(animate);if(!ready)return;
+  var dt=(ts-lastT)/1000;if(dt>.05)dt=.05;lastT=ts;
+  if(autoRot&&!userInteracting){var c=map.getCenter();c.lng+=dt*8;map.setCenter(c)}
+  if(sA){uI();return}
+  if(pl&&cF<FL.length){
+    var f=FL[cF];var dur=Math.max(.08,Math.min(.5,.15+f.di/8000))/sp;
+    aP+=dt/dur;
+    if(aP>=1){aP=0;tD+=f.di;vA[f.f]=(vA[f.f]||0)+1;vA[f.t]=(vA[f.t]||0)+1;airportFeats[f.f]=(airportFeats[f.f]||0)+1;airportFeats[f.t]=(airportFeats[f.t]||0)+1;completedFeats.push(mkFeat(cF));cF++}
+    updateSources();
+  }
+  uI();
+}
+
+function showAll(){
+  completedFeats=FL.map(function(_,i){return mkFeat(i)});
+  FL.forEach(function(f){airportFeats[f.f]=(airportFeats[f.f]||0);airportFeats[f.t]=(airportFeats[f.t]||0)});
+  updateSources();
+}
+
+function initMap(){
+  var tkInput=document.getElementById('tk');
+  var token=tkInput.value.trim();
+  if(!token||!token.startsWith('pk.')){
+    tkInput.classList.add('err');
+    document.getElementById('token-err').style.display='block';
+    setTimeout(function(){tkInput.classList.remove('err')},400);
+    return;
+  }
+  if(typeof mapboxgl==='undefined'){
+    document.getElementById('load-err').style.display='flex';return;
+  }
+  mapboxgl.accessToken=token;
+  document.getElementById('token-screen').style.display='none';
+  document.getElementById('info').style.display='block';
+  document.getElementById('leg').style.display='block';
+  document.getElementById('ui').style.display='flex';
+  document.getElementById('pb').style.display='block';
+
+  map=new mapboxgl.Map({container:'map',style:'mapbox://styles/mapbox/dark-v11',projection:'globe',center:[-40,30],zoom:1.5});
+  map.on('mousedown',function(){userInteracting=true});
+  map.on('mouseup',function(){userInteracting=false});
+  map.on('touchstart',function(){userInteracting=true});
+  map.on('touchend',function(){userInteracting=false});
+  map.on('dragend',function(){userInteracting=false});
+
+  map.on('style.load',function(){
+    map.setFog({color:'rgb(8,8,24)','high-color':'rgb(20,20,60)','horizon-blend':0.06,'space-color':'rgb(5,5,12)','star-intensity':0.7});
+    map.addSource('completed',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addSource('active',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addSource('airports',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    map.addLayer({id:'completed-glow',type:'line',source:'completed',paint:{'line-color':['get','color'],'line-width':4,'line-opacity':0.15,'line-blur':3}});
+    map.addLayer({id:'completed-lines',type:'line',source:'completed',paint:{'line-color':['get','color'],'line-width':1.5,'line-opacity':0.75}});
+    map.addLayer({id:'active-glow',type:'line',source:'active',paint:{'line-color':['get','color'],'line-width':8,'line-opacity':0.3,'line-blur':4}});
+    map.addLayer({id:'active-line',type:'line',source:'active',paint:{'line-color':['get','color'],'line-width':3,'line-opacity':1}});
+    map.addLayer({id:'airport-dots',type:'circle',source:'airports',paint:{'circle-radius':['get','size'],'circle-color':'#ffffff','circle-opacity':0.6,'circle-stroke-width':0.5,'circle-stroke-color':'rgba(100,180,255,0.4)'}});
+    ready=true;lastT=performance.now();requestAnimationFrame(animate);
+  });
+}
+
+document.getElementById('go').onclick=initMap;
+document.getElementById('tk').onkeydown=function(e){if(e.key==='Enter')initMap()};
+
+document.getElementById('bp').onclick=function(){pl=!pl;this.classList.toggle('active',pl);this.textContent=pl?'▶ Play':'⏸ Pause'};
+document.getElementById('bs').onclick=function(){sI=(sI+1)%spds.length;sp=spds[sI];this.textContent=sp+'×'};
+document.getElementById('ba').onclick=function(){sA=!sA;this.classList.toggle('active',sA);this.textContent=sA?'Animate':'Show All';if(sA)showAll()};
+document.getElementById('br').onclick=function(){autoRot=!autoRot;this.classList.toggle('active',autoRot);this.textContent=autoRot?'Rotate':'Fixed'};
+document.getElementById('bx').onclick=function(){cF=0;aP=0;tD=0;sA=false;completedFeats=[];airportFeats={};vA={};if(ready)updateSources();map.flyTo({center:[-40,30],zoom:1.5});document.getElementById('ba').classList.remove('active');document.getElementById('ba').textContent='Show All';pl=true;document.getElementById('bp').classList.add('active');document.getElementById('bp').textContent='▶ Play'};
+})();
+</script>
+</body>
+</html>
