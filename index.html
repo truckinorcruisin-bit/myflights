@@ -450,11 +450,11 @@ function initMap(){
     map.addSource('active',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
     map.addSource('airports',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
 
-    map.addLayer({id:'completed-glow',type:'line',source:'completed',slot:'top',paint:{'line-color':['get','color'],'line-width':5,'line-opacity':0.25,'line-blur':3}});
-    map.addLayer({id:'completed-lines',type:'line',source:'completed',slot:'top',paint:{'line-color':['get','color'],'line-width':2,'line-opacity':1}});
-    map.addLayer({id:'active-glow',type:'line',source:'active',slot:'top',paint:{'line-color':['get','color'],'line-width':10,'line-opacity':0.4,'line-blur':4}});
-    map.addLayer({id:'active-line',type:'line',source:'active',slot:'top',paint:{'line-color':['get','color'],'line-width':3.5,'line-opacity':1}});
-    map.addLayer({id:'airport-dots',type:'circle',source:'airports',slot:'top',paint:{'circle-radius':['get','size'],'circle-color':'#ffffff','circle-opacity':0.7,'circle-stroke-width':0.5,'circle-stroke-color':'rgba(100,180,255,0.4)'}});
+    map.addLayer({id:'completed-glow',type:'line',source:'completed',slot:'top',paint:{'line-color':['get','color'],'line-width':5,'line-opacity':0.25,'line-blur':3,'line-emissive-strength':1}});
+    map.addLayer({id:'completed-lines',type:'line',source:'completed',slot:'top',paint:{'line-color':['get','color'],'line-width':2,'line-opacity':1,'line-emissive-strength':1}});
+    map.addLayer({id:'active-glow',type:'line',source:'active',slot:'top',paint:{'line-color':['get','color'],'line-width':10,'line-opacity':0.4,'line-blur':4,'line-emissive-strength':1}});
+    map.addLayer({id:'active-line',type:'line',source:'active',slot:'top',paint:{'line-color':['get','color'],'line-width':3.5,'line-opacity':1,'line-emissive-strength':1}});
+    map.addLayer({id:'airport-dots',type:'circle',source:'airports',slot:'top',paint:{'circle-radius':['get','size'],'circle-color':'#ffffff','circle-opacity':0.7,'circle-stroke-width':0.5,'circle-stroke-color':'rgba(100,180,255,0.4)','circle-emissive-strength':1}});
 
     // Invisible wider hit area for easier hover detection on lines
     map.addLayer({id:'completed-hover',type:'line',source:'completed',slot:'top',paint:{'line-color':'rgba(0,0,0,0)','line-width':12}});
