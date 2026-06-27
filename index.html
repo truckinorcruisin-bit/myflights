@@ -464,7 +464,7 @@ function showAllFlights(){
 // ============================================================
 function initMap(){
   var tkInput=document.getElementById('tk');
-  var token=tkInput.value.trim();
+  var token=tkInput.value.trim() || MAPBOX_TOKEN;
   if(!token||!token.startsWith('pk.')){
     tkInput.classList.add('err');
     document.getElementById('token-err').style.display='block';
@@ -575,10 +575,28 @@ document.getElementById('bx').onclick=function(){
 
 
 // ============================================================
-// BOOT SEQUENCE — load data first, then wait for token
+// MAPBOX TOKEN — injected by GitHub Actions at deploy time
+// Do not paste your token here. Set it as a GitHub secret
+// named MAPBOX_TOKEN, and the deploy workflow replaces this.
+// For local development, set ?token=pk.xxx in the URL.
+// ============================================================
+var MAPBOX_TOKEN = '__MAPBOX_TOKEN__';
+
+// Allow local override via URL param: index.html?token=pk.eyJ1...
+var urlParams = new URLSearchParams(window.location.search);
+if(urlParams.has('token')) MAPBOX_TOKEN = urlParams.get('token');
+
+
+// ============================================================
+// BOOT SEQUENCE — load data first, then init map
 // ============================================================
 loadFlightData().then(function(flights){
   initFlights(flights);
+  // If token was injected by CI or passed via URL, skip the prompt
+  if(MAPBOX_TOKEN && MAPBOX_TOKEN.startsWith('pk.')){
+    document.getElementById('tk').value = MAPBOX_TOKEN;
+    initMap();
+  }
 }).catch(function(err){
   console.error(err);
 });
